@@ -6,7 +6,7 @@ import arcpy
 
 import azure.functions as func
 
-from arcgis.gis import GIS
+from arcgis.gis import GIS, Item
 from arcgis.features import FeatureLayerCollection
 from arcgis.geocoding import reverse_geocode
 
@@ -130,6 +130,8 @@ def construct_ticket_dict(msg_obj: dict) -> dict:
     
     #Switch between these two to see what happens
     # find_variables = reverse_geocode(location={"x": lng, "y": lat})
+    
+    #This will create a dictionary of other values from the point
     find_variables = reverse_geocode([lng, lat])
     
     
@@ -539,87 +541,6 @@ def process_tickets(msg: dict) -> None:
         exit(1)
     
     logging.info("Msg was processed")
-
-
-#Update tickets with an input
-def update_individual_attribute(ticket_num, attributes):
-    try: 
-        gis = gis_login()
-        
-        #Define the SQL query to locate the specific ticket 
-        query = f"ticketnum = {ticket_num}"
-        
-        #List the fields to update (based on n)
-        
-        
-        
-        
-        
-        
-        
-        # mission_name = process_message(ticket_num)
-        # logging.info(f"Starting update for ticket: {mission_name}")
-        
-        # search_res = gis.content.search("title: Ticket")
-        # if len(search_res) == 0:
-        #     logging.warning(f"Ticket Layer not found!")
-        #     return
-        
-        
-        # portal_item = search_res[0]
-        # tickets_layer = portal_item.layers[0]
-         
-        # # Query the feature layer for the specific ticket number
-        # query_result = tickets_layer.query(where=f"ticketnum = '{ticket_num}'")
-         
-        # # Check if the ticket number exists
-        # if len(query_result.features) == 0:
-        #     logging.warning(f"Ticket number {ticket_num} not found!")
-        #     return
-        
-        
-        # ticket_feature = query_result.features[0]
-        
-        # # Update the attributes of the ticket
-        # for key, value in attributes.items():
-        #     ticket_feature.attributes[key] = value
-        
-        # update_result = tickets_layer.edit_features(updates=[ticket_feature])
-        # logging.info(f"Ticket #{ticket_num} updated in the feature layer")
-        
-        
-        # search_res = gis.content.search("title: Ticket", item_type="Feature Layer")
-        
-        # # Iterate through each layer      
-        # for item in search_res:
-        #     logging.info(f"Checking layer: {item.title}")
-            
-        #     # Access the first layer of the item (you may need to adjust based on layer structure)
-        #     for layer in item.layer():
-        #         logging.info(f"Querying layer {layer.properties.name}")
-
-        #         # Query the layer for the specific ticket number
-        #         query_result = layer.query(where=f"ticketnum = '{ticket_num}'")
-
-        #         if len(query_result.features) > 0:
-        #             # Ticket found, return the feature and the layer
-        #             ticket_feature = query_result.features[0]
-        #             logging.info(f"Ticket #{ticket_num} found in layer: {layer.properties.name}")
-        #             return ticket_feature, layer
-        
-        # logging.warning(f"Ticket #{ticket_num} not found in the layer")
-        # return None, None
-            
-        
-    except Exception as ex:
-        logging.error(ex)
-        logging.warining("Msg# processing failed!")
-        exit(1)
-        
-    logging.info("Msg was processed")
-        
-        
-        
     
 
 #This is the create mission function
@@ -633,29 +554,79 @@ def add_tickets_to_missions():
     directory = r"C:\Users\Steven.Portillo\Coding_Projects\Python\Practice\.vs\ArcGIS_Projects\Steven"
     process_files_in_directory(directory, process_tickets)
     
-@app.queue_trigger(arg_name="azqueue", queue_name="adms-gis-new-missions",
-                   connection="ADMS_STORE_CONNSTR")
-def update_command():
-    ticket_num = input("Input the ticket number: ")
+
+
+    #Parameters can be to search for a specific mission name, ticket number, ticket long and ticket lat
+def modify_points_version_two(gis, mission_name, ticket_num,ticketLng, ticketLat):
+    search_res = gis.content.search(f"title: {mission_name}")
     
-    attributes = {}
-    while True: 
-        key = input("Enter the attribute name to update (type done to finish):")
-        if key.lower() == "done":
-            break
-        value = input(f"Enter the value for the {key}")
-        attributes[key] = value
+    #If the search returns nothing then print out that there is no mission called that in the portal
+    if len(search_res) == 0:
+        print(f"title: {mission_name} does not exist in this portal!!!!!")
+        exit(0)
+        
+    portal_item = search_res[0]
+    print(f"found{portal_item}")
     
-    ticket = update_individual_attribute(ticket_num, attributes)
+    
+    tickets_layer = portal_item.layers[0]
+    
+
+    #This can be one function for lets say updating this and that
+    #Update the ticket 
+    #Let's say we want to the reverse 
+    reverse_geocode_result = reverse_geocode([ticketLng, ticketLat])
+    ticketAddress = reverse_geocode_result['address']['Match_addr']
+    ticketCounty = reverse_geocode_result['address']['Subregion']
+    ticketCity = reverse_geocode_result['address']['City']
+    tickeetZipCode = reverse_geocode_result['address']['Postal']
+    ticketState = reverse_geocode_result['address']['RegionAbbr']
+    tickets_features = tickets_layer.query().features
+    
+
+
+    ticket_edit = [f for f in tickets_features if f.attributes['ticketnum']==ticket_num][0]
+
+
+    #edit the ticket "loadmonitor" attribute
+    ticket_edit.attributes["loadmonitor"] = "Marco Polo"
+    #edit the ticket "lng" attribute
+    ticket_edit.attributes["lng"] = ticketLng
+    #edit the ticket "lat" attribute
+    ticket_edit.attributes["lat"] = ticketLat
+    #edit the ticket "geometry" attribute
+    ticket_edit.geometry = {"x": ticketLng, "y": ticketLat}
+    #edit the ticket city attribute
+    ticket_edit.attributes["city"] = ticketCity
+    #edit the ticket county attribute
+    ticket_edit.attributes["county"] = ticketCounty
+    #edit the ticket state attribute
+    ticket_edit.attributes["state"] = ticketState
+    
+
+
+    #Print the results of the update
+    update_result = tickets_layer.edit_features(updates = [ticket_edit])
+
+
+
+
 
 
 #A random testing function for functionalities
-def testing(input):
-    print(input)
+def testing():
+    #Let's try different parameters then
+    gis = gis_login()
+    mission_name = "St_Mary_Francine_2024_DEV"
+    ticket_num = 9164240926122926
+    ticket_lng = -91.38292051
+    ticket_lat = 29.70687683
+    
 
 
     
 if __name__ == "__main__":
     # create_mission_fs()
     # add_tickets_to_missions()
-    update_command()
+    #update_command()
+    testing()
