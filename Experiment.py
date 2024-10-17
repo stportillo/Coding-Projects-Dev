@@ -2,13 +2,15 @@ import os
 import json
 import logging
 import myutils
-import arcpy
+
+# import arcpy
 
 import azure.functions as func
 
 from arcgis.gis import GIS, Item
-from arcgis.features import FeatureLayerCollection
+from arcgis.features import FeatureLayerCollection, FeatureLayer
 from arcgis.geocoding import reverse_geocode
+from arcgis.mapping import WebMap
 
 
 #For this I hard coded it so it has the username and password and links atlas website
@@ -97,24 +99,6 @@ def construct_ticket_dict(msg_obj: dict) -> dict:
     
     # Initialize lat and lng with default values
     lat, lng = 0.0, 0.0
-
-    # # Parse the GPS coordinates from the "beginningGps" field
-    # try:
-    #     if "beginningGps" in msg_obj:
-    #         gps_coords = msg_obj["beginningGps"].split(",")
-            
-    #         # Ensure that the split produces exactly two parts
-    #         if len(gps_coords) == 2:
-    #             lat = float(gps_coords[0].strip())  # First part is latitude
-    #             lng = float(gps_coords[1].strip())  # Second part is longitude
-    #         else:
-    #             logging.error(f"GPS coordinates are malformed: {msg_obj['beginningGps']}")
-    #     else:
-    #         logging.error("beginningGps field is missing from the message object")
-    # except (ValueError, IndexError, KeyError) as e:
-    #     logging.error(f"Error parsing GPS coordinates: {e}")
-    #     lat, lng = 0.0, 0.0  # Default values if parsing fails
-        
         
     try:
         gps = find_key(msg_obj, "beginningGps")
@@ -248,10 +232,11 @@ def process_missions(msg: dict):
             "description": "App worker automatically created point layer",
             "geometryType": "esriGeometryPoint",
             "extent": {
-                "ymin": 17.903,
-                "xmin": -165.938,
-                "ymax": 53.702,
-                "xmax": -30.938,
+                #Had to change this to zoom into the United States
+                "ymin": 24.396308,
+                "xmin": -125.0,
+                "ymax": 49.384358,
+                "xmax": -66.93457,
                 "spatialReference": {"wkid": 4326},
             },
             "objectIdField": "OBJECTID",
@@ -556,57 +541,6 @@ def add_tickets_to_missions():
     
 
 
-    #Parameters can be to search for a specific mission name, ticket number, ticket long and ticket lat
-def modify_points_version_two(gis, mission_name, ticket_num,ticketLng, ticketLat):
-    search_res = gis.content.search(f"title: {mission_name}")
-    
-    #If the search returns nothing then print out that there is no mission called that in the portal
-    if len(search_res) == 0:
-        print(f"title: {mission_name} does not exist in this portal!!!!!")
-        exit(0)
-        
-    portal_item = search_res[0]
-    print(f"found{portal_item}")
-    
-    
-    tickets_layer = portal_item.layers[0]
-    
-
-    #This can be one function for lets say updating this and that
-    #Update the ticket 
-    #Let's say we want to the reverse 
-    reverse_geocode_result = reverse_geocode([ticketLng, ticketLat])
-    ticketAddress = reverse_geocode_result['address']['Match_addr']
-    ticketCounty = reverse_geocode_result['address']['Subregion']
-    ticketCity = reverse_geocode_result['address']['City']
-    tickeetZipCode = reverse_geocode_result['address']['Postal']
-    ticketState = reverse_geocode_result['address']['RegionAbbr']
-    tickets_features = tickets_layer.query().features
-    
-
-
-    ticket_edit = [f for f in tickets_features if f.attributes['ticketnum']==ticket_num][0]
-
-
-    #edit the ticket "loadmonitor" attribute
-    ticket_edit.attributes["loadmonitor"] = "Marco Polo"
-    #edit the ticket "lng" attribute
-    ticket_edit.attributes["lng"] = ticketLng
-    #edit the ticket "lat" attribute
-    ticket_edit.attributes["lat"] = ticketLat
-    #edit the ticket "geometry" attribute
-    ticket_edit.geometry = {"x": ticketLng, "y": ticketLat}
-    #edit the ticket city attribute
-    ticket_edit.attributes["city"] = ticketCity
-    #edit the ticket county attribute
-    ticket_edit.attributes["county"] = ticketCounty
-    #edit the ticket state attribute
-    ticket_edit.attributes["state"] = ticketState
-    
-
-
-    #Print the results of the update
-    update_result = tickets_layer.edit_features(updates = [ticket_edit])
 
 
 
@@ -615,18 +549,221 @@ def modify_points_version_two(gis, mission_name, ticket_num,ticketLng, ticketLat
 
 #A random testing function for functionalities
 def testing():
-    #Let's try different parameters then
-    gis = gis_login()
-    mission_name = "St_Mary_Francine_2024_DEV"
-    ticket_num = 9164240926122926
-    ticket_lng = -91.38292051
-    ticket_lat = 29.70687683
+    pass
+
+
+
+#Note to self
+#Check for parameters and their variable type to not have mistakes 
+#Please check this as this very important
+def modify_points_version_two(gis, mission_name, ticket_num, ticketLng, ticketLat, attributes_to_update):
+    try:
+        search_res = gis.content.search(f"title: {mission_name}")
+            
+        if len(search_res) == 0:
+            print(f"title: {mission_name} does not exist in this portal!")
+            exit(0)
+
+        portal_item = search_res[0]
+        print(f"found {portal_item}")
+        
+        tickets_layer = portal_item.layers[0]
+        print(f"found {tickets_layer}")
+        
+        tickets_features = tickets_layer.query().features
+        
+        #Original
+        #Obtains a list of tickets with the corresponding ticket number
+        #There has to be a value that can distingush each ticket like a date for example????
+        ticket_matches = [f for f in tickets_features if f.attributes['ticketnum']==ticket_num]
+        
+        #If no ticket is found then exit
+        if len(ticket_matches) == 0:
+            print(f"Ticket number {ticket_num} not found")
+            return
+    
+        #Obtains the first ticket in the list, usually will only be one item in the matched ticket numbers
+        ticket_edit = ticket_matches[0]
+        
+        
+        
+        #If the lat and lng are changed, all corresponding values need to be changed 
+        #This includes the city, postal, address, county and state --> Will have to check if there is anything else that needs change 
+        if ticketLng is not None and ticketLat is not None: 
+            #Reverse geocode helps with obtaining specific data of a point
+            reverse_geocode_result = reverse_geocode([ticketLng, ticketLat])
+            
+            #City, address, county, postal code and state are interpreted here
+            ticket_city = reverse_geocode_result['address']['City']
+            ticket_address = reverse_geocode_result['address']['Match_addr']
+            ticket_county = reverse_geocode_result['address']['Subregion']
+            ticket_postal_code = reverse_geocode_result['address']['Postal']
+            ticket_state = reverse_geocode_result['address']['RegionAbbr']
+            
+            #The values above are then pushed into their respective dictionaries either attributes or geometry
+            #Geometry is only the x (Longitude) and y (Latitude) coordinates
+            ticket_edit.attributes["lng"] = ticketLng
+            ticket_edit.attributes["lat"] = ticketLat
+            ticket_edit.geometry = {"x": ticketLng, "y": ticketLat}
+            
+            #The values pertaining to city, county, state, address and postal are pushed as well into the dictionary
+            ticket_edit.attributes["city"] = ticket_city
+            ticket_edit.attributes["county"] = ticket_county
+            ticket_edit.attributes["state"] = ticket_state
+            ticket_edit.attributes["address"] = ticket_address
+            ticket_edit.attributes["postal"] = ticket_postal_code
+     
+
+        #If there is anything to update 
+        #Any attributes that need to be changed run through here
+        if attributes_to_update:
+            """
+            For every attribute in the dictionary of attribute_to_update
+            if there is an attribute in the dictionaries in the ticket 
+            Make the attribute of the ticket the value from attributes_to_update
+            """
+            
+            for attr, value in attributes_to_update.items():
+                if attr in ticket_edit.attributes:
+                    ticket_edit.attributes[attr] = value
+                else: 
+                    print(f"Warning: attribute{attr} does not exist in the ticket")
+         
+        #The updated attributes are then sent and printed
+        update_result = tickets_layer.edit_features(updates = [ticket_edit])
+        
+
+        update_result_success = update_result['updateResults'][0]['success']
+        update_result_objectID = update_result['updateResults' ][0]['objectId']
+        
+        
+        if update_result_success:
+            print(f"Update successful for objectID: {update_result_objectID}")
+        else:
+            print(f"Failed to update ticket #{ticket_num}")
+        # return update_result
+    
+    except Exception as Ex:
+        print(f"There was an error with something: {Ex}")
+    
+
+#This function is used to edit the feature layer collection
+def edit_mission(gis, mission_name):
+    #Serch for the mission (feature layer collection)
+    search_res = gis.content.search(f"title: {mission_name}")
+    
+    
+    # new_extent = {
+    #     "xmin": -165.938,
+    #     "ymin": 17.903,
+    #     "xmax": -30.938,
+    #     "ymax": 53.702,
+    #     "spatialReference": {
+    #         "wkid": {"wkid": 4326}
+    #     }
+    # }
+
+
+    # new_definition = {
+    #     "name": "My new tickets",
+    #     "description": "A new application is being made here",
+    #     "extent": new_extent
+    # }
+    
+    #This is a dictionary with things to change for the feature layer collection
+    another_thing = {
+        'description': "A new application is being made here"
+        
+    }
+    
+
+    #If nothing shows up then return that it does not exist
+    if len(search_res) == 0:
+        print(f"title: {mission_name} does not exist in this portal!")
+        exit(0)
+
+    #Searches for the feature layer collection (Feature Service)
+    portal_item = search_res[0]
+    print(f"found {portal_item}")
+    
+    #Creates an instance of the feature layer collection
+    flc = FeatureLayerCollection.fromitem(portal_item)
+    
+    #This will print out all the properties in the feature layer collection
+    print(flc)
+    
+    #This will update the feature layer collection
+    flc.manager.update_definition(another_thing)
+    
     
 
 
+def edit_feature_layer(gis, mission_name, new_parameters: dict):
+    """_summary_
+    This function allows the user to update the individual feature layer
+    For example you can change the name, the extent and other attributes below
+    
+    
+    """
+    
+    search_res = gis.content.search(f"title: {mission_name}")
+    
+    
+    if len(search_res) == 0:
+        print(f"title: {mission_name} does not exist in this portal!")
+        exit(0)
+    
+    portal_item = search_res[0]
+    print(f"found{portal_item}")
+    
+    target_folder = portal_item.layers[0]
+    
+    feature_layer = FeatureLayer(target_folder)
+    
+    print(feature_layer.features)
+    # feature_layer.manager.update_definition(new_parameters)
+    
+    
+    
+    
     
 if __name__ == "__main__":
     # create_mission_fs()
     # add_tickets_to_missions()
-    #update_command()
-    testing()
+    
+    
+    
+    
+    
+
+
+    #Let's try different parameters then
+    # gis = gis_login()
+    # mission_name = "St_Mary_Francine_2024_DEV"
+    # ticket_num = "9164240926103102"
+    # load_date = "9/26/2024, 10:45 AM"
+    # ticket_lng = -118.2437
+    # ticket_lat = 34.0522
+    
+    # attributes_to_update = {
+    #     "loadmonitor": "Marco Polo",
+    #     "loadsitedesc": "change",
+    #     "roadwayid": 12345
+    #     }
+    
+    # modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+    
+    
+    #Testing for editing mission layer
+    # gis = gis_login()
+    # mission_name = "St_Mary_Francine_2024_DEV"
+    
+    
+    # edit_mission(gis, mission_name)
+
+
+    gis = gis_login()
+    mission_name = "St_Mary_Francine_2024_DEV"
+    county_name = "St. Mary Parish"
+    
+    # edit_mission(gis, mission_name, county_name)
