@@ -40,6 +40,10 @@ def modify_point(gis, fs_name, ticket_num, ticketLng, ticketLat):
         tickets_layer = portal_item.layers[0]
         #to update a ticket
         #query the ticket layer for the ticket number
+
+
+        #Yordy was adding these features
+        #He was adding the city, state, county, zip code and region abbre
         #first query the ticket layer for the features cllection
         reverse_geocode_result = reverse_geocode([ticketLng, ticketLat])
         # print(reverse_geocode_result)
@@ -49,6 +53,9 @@ def modify_point(gis, fs_name, ticket_num, ticketLng, ticketLat):
         tickeetZipCode = reverse_geocode_result['address']['Postal']
         ticketState = reverse_geocode_result['address']['RegionAbbr']
         tickets_features = tickets_layer.query().features
+        #This could be a function for when there is a change in latitude and longitude
+
+
         #get the ticket feature from the features collection using the ticket number
         #for a specific ticket
         ticket_feature = [f for f in tickets_features if f.attributes['ticketnum']==ticket_num][0]
@@ -68,6 +75,9 @@ def modify_point(gis, fs_name, ticket_num, ticketLng, ticketLat):
         ticket_edit.attributes["county"] = ticketCounty
         #edit the ticket state attribute
         ticket_edit.attributes["state"] = ticketState
+        
+
+
         #print the result of the update
         update_result = tickets_layer.edit_features(updates = [ticket_edit])
         update_result_success = update_result['updateResults'][0]['success']
@@ -75,4 +85,5 @@ def modify_point(gis, fs_name, ticket_num, ticketLng, ticketLat):
         if update_result_success == True:
             print(f"the update result for objectID: {update_result_objectID} is: {update_result_success}")       
         return update_result
+
 
