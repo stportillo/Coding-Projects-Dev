@@ -178,10 +178,14 @@ def process_files_in_directory(directory: str, process_file_callback) -> None:
             else:
                 logging.error(f"Sipping file due to load error: {filename}")
     
-
+#Function to conduct reverse geocode for a JSON file
 def reverse_geography(msg_obj: dict):
     lat, lng = 0.0, 0.0
-        
+    """    
+    In every JSON file there is a "beginningGPS" which will give the coordinates together
+    Example is below
+    "beginningGps": "29.75911431,-91.17472132"
+    """
     try:
         gps = find_key(msg_obj, "beginningGps")
         gps_coords = gps.split(",")  # Split the string by the comma
@@ -193,6 +197,7 @@ def reverse_geography(msg_obj: dict):
         lat = 0.0  # Default value if parsing fails
         lng = 0.0  # Default value if parsing fails
         
+    #This create a dictionary with any information such as postal, city, state, etc.
     coordinates = reverse_geocode([lng, lat])
     
     return coordinates
@@ -205,7 +210,7 @@ def extent_of_state(state_name):
     
     #Find the feature layer for the state boundaries
     state_layer_url = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_States_Generalized_Boundaries/FeatureServer/0"
-    state_layer = FeatureLayer(state_layer_url)
+    state_layer = FeatureLayer(state_layer_url) #Obtains the data from the url as makes it an object in memory 
     
     
     #Get the state boundary layer (URL is the feature layer )
@@ -265,14 +270,20 @@ def process_missions(msg: dict):
         portal_folder = "ADMS-{0}".format(hosting_env)#Will store the mission according to the hosting environment
 
 
+        """
+        This is the code that checks for the extent of the state
+        """
         #Try to make the state the extent a thing here
         coordinates_dict = reverse_geography(msg)
         #Find the state name
         state_name = coordinates_dict['address']['Region']
-        
         #Get the extent of the state
         new_extent = extent_of_state(state_name)
         
+
+
+
+
         #Trying to find the mission folder name and if not there it is caught
         target_folder = gis.content.folders.get( 
                     folder=portal_folder, owner=gis.properties.user.username
@@ -641,20 +652,23 @@ def add_tickets_to_missions():
 #Please check this as this very important
 def modify_points_version_two(gis, mission_name, ticket_num, ticketLng, ticketLat, attributes_to_update):
     try:
+        #Search for the mission via mission_name in the organization's missions
         search_res = gis.content.search(f"title: {mission_name}")
     
+        #If there is no search results with the mission name then print it does not exist
         if len(search_res) == 0:
             print(f"title: {mission_name} does not exist in this portal!")
             exit(0)
 
+        #The first result should be the mission
         portal_item = search_res[0]
         print(f"found {portal_item}")
         
-        
+        #The first and only layer in the collection should be the feature layer called "tickets"
         tickets_layer = portal_item.layers[0]
         print(f"found {tickets_layer}")
         
-        
+        #Must query the feature 
         tickets_features = tickets_layer.query().features
         
         #Original
@@ -762,7 +776,7 @@ def edit_mission(gis, mission_name, new_table):
     
     
 
-
+#Function to edit meta data for the ticket feature layer
 def edit_feature_layer(gis, mission_name, new_parameters: dict):
     """_summary_
     This function allows the user to update the individual feature layer
@@ -770,35 +784,28 @@ def edit_feature_layer(gis, mission_name, new_parameters: dict):
     
     """
     
+    #Search for the mission with the name
     search_res = gis.content.search(f"title: {mission_name}")
     
-    
+    #If it is not found then print out it doesnt exist
     if len(search_res) == 0:
         print(f"title: {mission_name} does not exist in this portal!")
         exit(0)
     
+    #The first item should be the mission name 
     portal_item = search_res[0]
     print(f"found {portal_item}")
     
-    # target_folder = portal_item.layers[0]
-    # print(f"found {target_folder}")
-    
+    #Make the first result an instance of a FeatureLayerCollection into memory
     flc = FeatureLayerCollection.fromitem(portal_item)
     print(f"found {flc}")
     
+    #In the feature layer collection obtain the first and only feature layer which is called "tickets"
     feature_layer = flc.layers[0]
     print(f"found {feature_layer}")
     
-    # print(feature_layer.features)
-    
+    #Update the feature layer definition (meta data) with the new parameters
+    #This can be a JSON file
     feature_layer.manager.update_definition(new_parameters)
     
-    # print(feature_layer)
-    # feature_layer.manager.update_definition(new_parameters)
     
-    
-    
-    
-    
-if __name__ == "__main__":
-    pass
