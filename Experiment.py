@@ -7,10 +7,10 @@ import myutils
 
 import azure.functions as func
 
-from arcgis.gis import GIS, Item
+from arcgis.gis import GIS
 from arcgis.features import FeatureLayerCollection, FeatureLayer
 from arcgis.geocoding import reverse_geocode
-from arcgis.mapping import WebMap
+from arcgis.geometry import Geometry
 
 
 #For this I hard coded it so it has the username and password and links atlas website
@@ -85,6 +85,7 @@ def process_message(msg: dict, search):
 
     return mission_fs_name_full
 
+#Any search in a key is made here and then sent to the find_key function
 def process_searches(msg: dict, search):
     searched_item = find_key(msg, search)
     return searched_item
@@ -115,10 +116,10 @@ def construct_ticket_dict(msg_obj: dict) -> dict:
     #Switch between these two to see what happens
     # find_variables = reverse_geocode(location={"x": lng, "y": lat})
     
-    #This will create a dictionary of other values from the point
+    #Reverse geocode to get information such as city, district and state etc. 
     find_variables = reverse_geocode([lng, lat])
     
-    
+    #This will create a dictionary of other values from the point    
     ticket_dict = {
         "attributes": {
             "ticketnum": find_key(msg_obj, "ticketNum"),
@@ -177,6 +178,82 @@ def process_files_in_directory(directory: str, process_file_callback) -> None:
             else:
                 logging.error(f"Sipping file due to load error: {filename}")
     
+
+def reverse_geography(msg_obj: dict):
+    lat, lng = 0.0, 0.0
+        
+    try:
+        gps = find_key(msg_obj, "beginningGps")
+        gps_coords = gps.split(",")  # Split the string by the comma
+        lat = float(gps_coords[0].strip())  # First part is latitude
+        lng = float(gps_coords[1].strip())  # Second part is longitude
+        
+    except (KeyError, ValueError, IndexError) as e:
+        logging.error(f"Error parsing GPS coordinates from msg_obj: {e}")
+        lat = 0.0  # Default value if parsing fails
+        lng = 0.0  # Default value if parsing fails
+        
+    coordinates = reverse_geocode([lng, lat])
+    
+    return coordinates
+
+
+#Function to find the extent of the state according to the ESRI open feature layer 
+def extent_of_state(state_name):
+    
+    gis = gis_login()
+    
+    #Find the feature layer for the state boundaries
+    state_layer_url = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_States_Generalized_Boundaries/FeatureServer/0"
+    state_layer = FeatureLayer(state_layer_url)
+    
+    
+    #Get the state boundary layer (URL is the feature layer )
+    query_result = state_layer.query(where=f"STATE_NAME='{state_name}'", return_geometry=True, out_fields="STATE_NAME")
+    
+   
+    if query_result and len(query_result.features) > 0:
+        # Extract the geometry (polygon) from the first feature
+        feature = query_result.features[0]
+    
+        state_geometry = feature.geometry
+        
+        if state_geometry and "rings" in state_geometry:
+            # Extract the rings (polygon coordinates)
+            rings = state_geometry['rings']
+            
+            # Initialize min/max values to calculate extent
+            xmin, ymin = float('inf'), float('inf')
+            xmax, ymax = float('-inf'), float('-inf')
+            
+            # Iterate over all the coordinates to find the min/max values
+            for ring in rings:
+                for point in ring:
+                    x, y = point[0], point[1]
+                    xmin = min(xmin, x)
+                    ymin = min(ymin, y)
+                    xmax = max(xmax, x)
+                    ymax = max(ymax, y)
+            
+            # Return the calculated extent as a dictionary
+            polygon_extent = {
+                "ymin": ymin,
+                "xmin": xmin,
+                "ymax": ymax,
+                "xmax": xmax,
+                "spatialReference": {"wkid": 4326},
+            }
+            # print(polygon_extent)
+            return polygon_extent
+        else:
+            return "Geometry not available or not a polygon"
+    else:
+        return "State not found in the layer"
+    
+    
+    
+    
+    
 #Processes all missions and if any mission folders need to be created
 def process_missions(msg: dict):
     directory = r"C:\Users\Steven.Portillo\Coding_Projects\Python\Practice\.vs\ArcGIS_Projects\Steven"
@@ -187,6 +264,16 @@ def process_missions(msg: dict):
         mission_fs_name_full = process_message(msg, "missionName")
         portal_folder = "ADMS-{0}".format(hosting_env)#Will store the mission according to the hosting environment
 
+
+        #Try to make the state the extent a thing here
+        coordinates_dict = reverse_geography(msg)
+        #Find the state name
+        state_name = coordinates_dict['address']['Region']
+        
+        #Get the extent of the state
+        new_extent = extent_of_state(state_name)
+        
+        #Trying to find the mission folder name and if not there it is caught
         target_folder = gis.content.folders.get( 
                     folder=portal_folder, owner=gis.properties.user.username
                 )
@@ -231,14 +318,19 @@ def process_missions(msg: dict):
             "name": "tickets",
             "description": "App worker automatically created point layer",
             "geometryType": "esriGeometryPoint",
-            "extent": {
+            "extent": new_extent,
                 #Had to change this to zoom into the United States
-                "ymin": 24.396308,
-                "xmin": -125.0,
-                "ymax": 49.384358,
-                "xmax": -66.93457,
-                "spatialReference": {"wkid": 4326},
-            },
+                # "ymin": 24.396308,
+                # "xmin": -125.0,
+                # "ymax": 49.384358,
+                # "xmax": -66.93457,
+                
+                #This is show the whole world
+                # "ymin": 17.903,
+                # "xmin": -165.938,
+                # "ymax": 53.702,
+                # "xmax": -30.938,
+                # "spatialReference": {"wkid": 4326},
             "objectIdField": "OBJECTID",
             "fields": [
                 {
@@ -515,7 +607,7 @@ def process_tickets(msg: dict) -> None:
         
         # ticket_num = process_searches(msg, "ticketNum")
         ticket_num = msg.get("ticketNum")
-        ticket_dict = construct_ticket_dict(msg) #Error
+        ticket_dict = construct_ticket_dict(msg) 
         
         # ticket_num = msg["TicketNum"]
         add_result = tickets_layer.edit_features(adds = [ticket_dict])
@@ -544,22 +636,13 @@ def add_tickets_to_missions():
 
 
 
-
-
-
-#A random testing function for functionalities
-def testing():
-    pass
-
-
-
 #Note to self
 #Check for parameters and their variable type to not have mistakes 
 #Please check this as this very important
 def modify_points_version_two(gis, mission_name, ticket_num, ticketLng, ticketLat, attributes_to_update):
     try:
         search_res = gis.content.search(f"title: {mission_name}")
-            
+    
         if len(search_res) == 0:
             print(f"title: {mission_name} does not exist in this portal!")
             exit(0)
@@ -567,8 +650,10 @@ def modify_points_version_two(gis, mission_name, ticket_num, ticketLng, ticketLa
         portal_item = search_res[0]
         print(f"found {portal_item}")
         
+        
         tickets_layer = portal_item.layers[0]
         print(f"found {tickets_layer}")
+        
         
         tickets_features = tickets_layer.query().features
         
@@ -583,6 +668,7 @@ def modify_points_version_two(gis, mission_name, ticket_num, ticketLng, ticketLa
             return
     
         #Obtains the first ticket in the list, usually will only be one item in the matched ticket numbers
+        #If there was more than one the same ticket
         ticket_edit = ticket_matches[0]
         
         
@@ -598,7 +684,7 @@ def modify_points_version_two(gis, mission_name, ticket_num, ticketLng, ticketLa
             ticket_address = reverse_geocode_result['address']['Match_addr']
             ticket_county = reverse_geocode_result['address']['Subregion']
             ticket_postal_code = reverse_geocode_result['address']['Postal']
-            ticket_state = reverse_geocode_result['address']['RegionAbbr']
+            ticket_state = reverse_geocode_result['address']['Region']
             
             #The values above are then pushed into their respective dictionaries either attributes or geometry
             #Geometry is only the x (Longitude) and y (Latitude) coordinates
@@ -646,35 +732,14 @@ def modify_points_version_two(gis, mission_name, ticket_num, ticketLng, ticketLa
     except Exception as Ex:
         print(f"There was an error with something: {Ex}")
     
+    
+    
+    
 
 #This function is used to edit the feature layer collection
-def edit_mission(gis, mission_name):
+def edit_mission(gis, mission_name, new_table):
     #Serch for the mission (feature layer collection)
     search_res = gis.content.search(f"title: {mission_name}")
-    
-    
-    # new_extent = {
-    #     "xmin": -165.938,
-    #     "ymin": 17.903,
-    #     "xmax": -30.938,
-    #     "ymax": 53.702,
-    #     "spatialReference": {
-    #         "wkid": {"wkid": 4326}
-    #     }
-    # }
-
-
-    # new_definition = {
-    #     "name": "My new tickets",
-    #     "description": "A new application is being made here",
-    #     "extent": new_extent
-    # }
-    
-    #This is a dictionary with things to change for the feature layer collection
-    another_thing = {
-        'description': "A new application is being made here"
-        
-    }
     
 
     #If nothing shows up then return that it does not exist
@@ -690,10 +755,10 @@ def edit_mission(gis, mission_name):
     flc = FeatureLayerCollection.fromitem(portal_item)
     
     #This will print out all the properties in the feature layer collection
-    print(flc)
+    # print(flc.properties.capabilities)
     
     #This will update the feature layer collection
-    flc.manager.update_definition(another_thing)
+    flc.manager.update_definition(new_table)
     
     
 
@@ -702,7 +767,6 @@ def edit_feature_layer(gis, mission_name, new_parameters: dict):
     """_summary_
     This function allows the user to update the individual feature layer
     For example you can change the name, the extent and other attributes below
-    
     
     """
     
@@ -714,13 +778,22 @@ def edit_feature_layer(gis, mission_name, new_parameters: dict):
         exit(0)
     
     portal_item = search_res[0]
-    print(f"found{portal_item}")
+    print(f"found {portal_item}")
     
-    target_folder = portal_item.layers[0]
+    # target_folder = portal_item.layers[0]
+    # print(f"found {target_folder}")
     
-    feature_layer = FeatureLayer(target_folder)
+    flc = FeatureLayerCollection.fromitem(portal_item)
+    print(f"found {flc}")
     
-    print(feature_layer.features)
+    feature_layer = flc.layers[0]
+    print(f"found {feature_layer}")
+    
+    # print(feature_layer.features)
+    
+    feature_layer.manager.update_definition(new_parameters)
+    
+    # print(feature_layer)
     # feature_layer.manager.update_definition(new_parameters)
     
     
@@ -728,42 +801,4 @@ def edit_feature_layer(gis, mission_name, new_parameters: dict):
     
     
 if __name__ == "__main__":
-    # create_mission_fs()
-    # add_tickets_to_missions()
-    
-    
-    
-    
-    
-
-
-    #Let's try different parameters then
-    # gis = gis_login()
-    # mission_name = "St_Mary_Francine_2024_DEV"
-    # ticket_num = "9164240926103102"
-    # load_date = "9/26/2024, 10:45 AM"
-    # ticket_lng = -118.2437
-    # ticket_lat = 34.0522
-    
-    # attributes_to_update = {
-    #     "loadmonitor": "Marco Polo",
-    #     "loadsitedesc": "change",
-    #     "roadwayid": 12345
-    #     }
-    
-    # modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
-    
-    
-    #Testing for editing mission layer
-    # gis = gis_login()
-    # mission_name = "St_Mary_Francine_2024_DEV"
-    
-    
-    # edit_mission(gis, mission_name)
-
-
-    gis = gis_login()
-    mission_name = "St_Mary_Francine_2024_DEV"
-    county_name = "St. Mary Parish"
-    
-    # edit_mission(gis, mission_name, county_name)
+    pass
