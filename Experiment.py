@@ -3,8 +3,6 @@ import json
 import logging
 import myutils
 
-# import arcpy
-
 import azure.functions as func
 
 from arcgis.gis import GIS
@@ -65,8 +63,8 @@ def gis_login() -> GIS:
         logging.error("Failed to login in to ArcGIS Portal: {0}".format(e))
         raise
     
-#Process a certain key within the json files (dictionaries)
-def process_message(msg: dict, search):
+#Process mission name within the json files (dictionaries)
+def process_mission_name(msg: dict, search):
     """
     According to the original code there is only one main thing that is shared
     and that is the mission name
@@ -79,6 +77,7 @@ def process_message(msg: dict, search):
     """
     hosting_env = "DEV"
     
+    #This uses the myutils helper functions created
     mission_name = find_key(msg, search)
     mission_fs_name = myutils.sanitize_fs_name(mission_name)
     mission_fs_name_full = myutils.get_unique_fs_name_per_env(mission_fs_name, hosting_env)
@@ -112,12 +111,8 @@ def construct_ticket_dict(msg_obj: dict) -> dict:
         lat = 0.0  # Default value if parsing fails
         lng = 0.0  # Default value if parsing fails
     
-    
-    #Switch between these two to see what happens
-    # find_variables = reverse_geocode(location={"x": lng, "y": lat})
-    
     #Reverse geocode to get information such as city, district and state etc. 
-    find_variables = reverse_geocode([lng, lat])
+    location_data = reverse_geocode([lng, lat])
     
     #This will create a dictionary of other values from the point    
     ticket_dict = {
@@ -129,10 +124,15 @@ def construct_ticket_dict(msg_obj: dict) -> dict:
             "roadwayid": find_key(msg_obj, "RoadwayId"),
             "lat": lat,
             "lng": lng, 
-            "city": find_key(find_variables,"City"),
-            "county": find_key(find_variables, "Subregion"),
-            "state": find_key(find_variables, "Region"),
-            "district": find_key(find_variables, "District"),
+            
+            #The seperated part shows that the key must be found in location_data
+            #this is reverse_geocode aspect of the code
+            "city": find_key(location_data,"City"),
+            "county": find_key(location_data, "Subregion"),
+            "state": find_key(location_data, "Region"),
+            "district": find_key(location_data, "District"),
+            
+            
             "passclass": find_key(msg_obj, "PassClass"),
             "disposalsite": find_key(msg_obj, "disposalSiteName"),
             "disposalmonitor": find_key(msg_obj, "disposalMonitor_ID"),
@@ -159,7 +159,7 @@ def construct_ticket_dict(msg_obj: dict) -> dict:
     # Log or print to debug
     logging.info(f"Constructed ticket dictionary: {ticket_dict}")
     
-    #Test this out
+    #Returns the completed dictionary for each ticket
     return ticket_dict
 
 #Processes the file in the directory 
@@ -266,7 +266,7 @@ def process_missions(msg: dict):
     try:
         gis = gis_login()
         
-        mission_fs_name_full = process_message(msg, "missionName")
+        mission_fs_name_full = process_mission_name(msg, "missionName")
         portal_folder = "ADMS-{0}".format(hosting_env)#Will store the mission according to the hosting environment
 
 
@@ -604,7 +604,7 @@ def process_missions(msg: dict):
 def process_tickets(msg: dict) -> None:
     try:
         gis = gis_login()
-        mission_fs_name_full = process_message(msg, "missionName")
+        mission_fs_name_full = process_mission_name(msg, "missionName")
         
         search_res = gis.content.search(f"title: {mission_fs_name_full}")
         
@@ -650,7 +650,7 @@ def add_tickets_to_missions():
 #Note to self
 #Check for parameters and their variable type to not have mistakes 
 #Please check this as this very important
-def modify_points_version_two(gis, mission_name, ticket_num, ticketLng, ticketLat, attributes_to_update):
+def modify_points(gis, mission_name, ticket_num, ticketLng, ticketLat, attributes_to_update):
     try:
         #Search for the mission via mission_name in the organization's missions
         search_res = gis.content.search(f"title: {mission_name}")

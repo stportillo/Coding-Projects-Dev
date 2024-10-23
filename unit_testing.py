@@ -24,7 +24,7 @@ class Testing():
             "roadwayid": 9282882,
             "loaddatetime": myutils.convert_iso8601_to_epoch_ms("2024-09-27 08:14:44")
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
     
     def testingTwo():
         gis = Experiment.gis_login()
@@ -38,7 +38,7 @@ class Testing():
             "loadsitedesc": "New Worker",
             "roadwayid": 786238
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
         
     #Ticket Number invalid
     #Remember that all parameters must be correctly used with the correct variable type
@@ -54,7 +54,7 @@ class Testing():
             "loadsitedesc": "New Worker",
             "roadwayid": 786238
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
         
     #Gis is not properly configured
     def testingFour():
@@ -69,7 +69,7 @@ class Testing():
             "loadsitedesc": "New Worker",
             "roadwayid": 786238
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
         
     def testingFive():
         gis = Experiment.gis_login()
@@ -83,7 +83,7 @@ class Testing():
             "loadsitedesc": "Worker",
             "roadwayid": 435277283
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
         
     #New York Museum of Art
     def testingSix():
@@ -98,7 +98,7 @@ class Testing():
             "loadsitedesc": "Artist",
             "roadwayid": 98765432
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
 
     def testingSeven():
         gis = Experiment.gis_login()
@@ -112,7 +112,7 @@ class Testing():
             "loadsitedesc": "Artistocrat",
             "roadwayid": 75432
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
         
         
     def testingEight():
@@ -127,7 +127,7 @@ class Testing():
             "loadsitedesc": "Artistocrat",
             "roadwayid": 98765432
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
     
     def testingNine():
         gis = Experiment.gis_login()
@@ -141,7 +141,7 @@ class Testing():
             "loadsitedesc": "Dostoevsky",
             "roadwayid": 875463749
             }
-        Experiment.modify_points_version_two(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
+        Experiment.modify_points(gis, mission_name, ticket_num, ticket_lng, ticket_lat, attributes_to_update)
 
 
 
@@ -163,27 +163,11 @@ class TestingTwo:
                     "latestWkid": 3857,
                     "wkid": 102100
                 },
-                
-                # "ymin": 17.903,
-                # "xmin": -165.938,
-                # "ymax": 53.702,
-                # "xmax": -30.938,
-                # "spatialReference": {
-                #     "latestWkid": 3857,
-                #     "wkid": 102100
-                # },
             },
-            # "fullExtent": {
-            #     "ymin": 24.396308,
-            #     "xmin": -125.0,
-            #     "ymax": 49.384358,
-            #     "xmax": -66.93457,
-            #     "spatialReference": {"wkid": 4326}
-            # },
+            
             "serviceDescription": "Trying to fix this"
         }
         
-        # county_name = "St. Mary Parish"
         
         Experiment.edit_mission(gis, mission_name, another_thing)
     
@@ -193,13 +177,6 @@ class TestingTwo:
         new_parameters = {
             "name": "Steven's cookies and change",
             "description": "Moby Dick - Great American Novel",
-            # "extent": {
-            #     "ymin": 17.903,
-            #     "xmin": -165.938,
-            #     "ymax": 53.702,
-            #     "xmax": -30.938,
-            #     "spatialReference": {"wkid": 4326}
-            # },
             "hasAttachments": True
         }
         # county_name = "Washington County"
