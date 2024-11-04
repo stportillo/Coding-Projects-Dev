@@ -245,7 +245,7 @@ def extent_of_state(state_name):
                 "ymin": ymin,
                 "xmin": xmin,
                 "ymax": ymax,
-                "xmax": xmax,
+                "xmax": xmax, 
                 "spatialReference": {"wkid": 4326},
             }
             # print(polygon_extent)
@@ -255,8 +255,43 @@ def extent_of_state(state_name):
     else:
         return "State not found in the layer"
     
+
+#This function will act as a check for repeated tickets
+#If there is a repeated ticlet, there must be something to change it 
+
+def check_repeated_tickets(gis, mission_name,ticket_number):
+    #Search for the mission via mission_name in the organization's missions
+    search_res = gis.content.search(f"title: {mission_name}")
+
+    #If there is no search results with the mission name then print it does not exist
+    if len(search_res) == 0:
+        print(f"title: {mission_name} does not exist in this portal!")
+        exit(0)
+
+    #The first result should be the mission
+    portal_item = search_res[0]
+    print(f"found {portal_item}")
     
+    #The first and only layer in the collection should be the feature layer called "tickets"
+    tickets_layer = portal_item.layers[0]
+    print(f"found {tickets_layer}")
     
+    #Must query the feature 
+    tickets_features = tickets_layer.query().features
+    
+    #Obtains a list of tickets with the corresponding ticket number
+    #There has to be a value that can distingush each ticket like a date for example????
+    ticket_matches = [f for f in tickets_features if f.attributes['ticketnum']==ticket_number]
+    
+    #If no ticket is found then exit
+    if len(ticket_matches) == 0:
+        print(f"Ticket number {ticket_number} not found")
+        logging.error(f"Ticket number is not in the system. Currently being inserted")
+        return
+    
+    logging.error("The ticket is already in the system. Please verify ticket number or go to update the ticket prompt please.")
+    print(f"Please check the ticket number and its contents. You may have to got to the update prompt to fix.")
+    exit(0)
     
     
 #Processes all missions and if any mission folders need to be created
@@ -280,8 +315,6 @@ def process_missions(msg: dict):
         #Get the extent of the state
         new_extent = extent_of_state(state_name)
         
-
-
 
 
         #Trying to find the mission folder name and if not there it is caught
@@ -618,6 +651,11 @@ def process_tickets(msg: dict) -> None:
         
         # ticket_num = process_searches(msg, "ticketNum")
         ticket_num = msg.get("ticketNum")
+        
+        #Check if the ticket number is in the system already
+        check_repeated_tickets(gis, mission_fs_name_full,ticket_num)
+        
+        #Construct the attributes for each ticket
         ticket_dict = construct_ticket_dict(msg) 
         
         # ticket_num = msg["TicketNum"]
